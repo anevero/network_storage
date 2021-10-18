@@ -1,0 +1,3 @@
+build --cxxopt="--std=c++2a" --cxxopt="-march=native" --compilation_mode=opt
+run --cxxopt="--std=c++2a" --cxxopt="-march=native" --compilation_mode=opt
+test --cxxopt="--std=c++2a" --cxxopt="-march=native" --compilation_mode=opt
