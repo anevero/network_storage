@@ -38,17 +38,10 @@ void HandleLoadRsaKeysOperation(std::string* rsa_public_key,
     return;
   }
 
-  std::cout << "Enter the public key filename: ";
-  std::string public_key_filename;
-  while (public_key_filename.empty()) {
-    std::getline(std::cin, public_key_filename, '\n');
-  }
-
-  std::cout << "Enter the private key filename: ";
-  std::string private_key_filename;
-  while (private_key_filename.empty()) {
-    std::getline(std::cin, private_key_filename, '\n');
-  }
+  auto public_key_filename = RequestStringInput(
+      "Enter the public key filename");
+  auto private_key_filename = RequestStringInput(
+      "Enter the private key filename");
 
   std::ifstream public_key_file(public_key_filename);
   std::stringstream public_key_buffer;
@@ -63,17 +56,10 @@ void HandleLoadRsaKeysOperation(std::string* rsa_public_key,
 
 void HandleSaveRsaKeysOperation(const std::string& rsa_public_key,
                                 const std::string& rsa_private_key) {
-  std::cout << "Enter the public key filename: ";
-  std::string public_key_filename;
-  while (public_key_filename.empty()) {
-    std::getline(std::cin, public_key_filename, '\n');
-  }
-
-  std::cout << "Enter the private key filename: ";
-  std::string private_key_filename;
-  while (private_key_filename.empty()) {
-    std::getline(std::cin, private_key_filename, '\n');
-  }
+  auto public_key_filename = RequestStringInput(
+      "Enter the public key filename");
+  auto private_key_filename = RequestStringInput(
+      "Enter the private key filename");
 
   std::ofstream public_key_file(public_key_filename);
   public_key_file << rsa_public_key;
@@ -106,11 +92,7 @@ void HandleUpdateSessionKeyOperation(int socket_fd) {
 }
 
 void HandleSetPasswordOperation(std::string* password_hash_key) {
-  std::cout << "Enter new password: ";
-  std::string password;
-  while (password.empty()) {
-    std::getline(std::cin, password, '\n');
-  }
+  auto password = RequestStringInput("Enter new password");
   *password_hash_key = GetSha256Hash(password);
 }
 
@@ -121,13 +103,7 @@ bool HandleGetDataOperation(int socket_fd,
     return false;
   }
 
-  std::cout << "Enter the key: ";
-  std::string key;
-  while (key.empty()) {
-    std::getline(std::cin, key, '\n');
-  }
-  key = GetSha256Hash(key);
-
+  auto key = GetSha256Hash(RequestStringInput("Enter the key"));
   auto message_encryption_init_vector = Generate128BitKey();
   auto encrypted_key = EncryptStringWithAesCbcCipher(
       key, aes_encryption_key, message_encryption_init_vector);
@@ -153,18 +129,8 @@ bool HandleUpdateDataOperation(int socket_fd,
     return false;
   }
 
-  std::cout << "Enter the key: ";
-  std::string key;
-  while (key.empty()) {
-    std::getline(std::cin, key, '\n');
-  }
-  key = GetSha256Hash(key);
-
-  std::cout << "Enter the content: ";
-  std::string content;
-  while (content.empty()) {
-    std::getline(std::cin, content, '\n');
-  }
+  auto key = GetSha256Hash(RequestStringInput("Enter the key"));
+  auto content = RequestStringInput("Enter the content (line)");
 
   auto message_encryption_init_vector = Generate128BitKey();
   auto content_encryption_init_vector = Generate128BitKey();
@@ -199,13 +165,7 @@ bool HandleDeleteDataOperation(int socket_fd,
     return false;
   }
 
-  std::cout << "Enter the key: ";
-  std::string key;
-  while (key.empty()) {
-    std::getline(std::cin, key, '\n');
-  }
-  key = GetSha256Hash(key);
-
+  auto key = GetSha256Hash(RequestStringInput("Enter the key"));
   auto message_encryption_init_vector = Generate128BitKey();
   auto encrypted_key = EncryptStringWithAesCbcCipher(
       key, aes_encryption_key, message_encryption_init_vector);
@@ -225,7 +185,7 @@ bool HandleDeleteDataOperation(int socket_fd,
 
 }
 
-constexpr absl::string_view kHelloText = R"(
+constexpr absl::string_view kProgramFeaturesPrompt = R"(
 Choose an operation from the following:
 - generate_rsa_keys / load_rsa_keys / save_rsa_keys
 - send_rsa_public_key
@@ -234,7 +194,7 @@ Choose an operation from the following:
 - get_data / update_data / delete_data
 - exit)";
 
-constexpr absl::string_view kHelpText = R"(
+constexpr absl::string_view kProgramRunningHelpText = R"(
 Arguments format:
 ./client [server ip] [server port]
 Example:
@@ -242,7 +202,7 @@ Example:
 
 int main(int argc, char** argv) {
   if (argc != 3) {
-    std::cout << "Invalid arguments.\n" << kHelpText << '\n';
+    std::cout << "Invalid arguments.\n" << kProgramRunningHelpText << '\n';
     return 1;
   }
   const std::string server_ip = argv[1];
@@ -275,10 +235,7 @@ int main(int argc, char** argv) {
   std::string password_hash_key = std::string(32, 't');
 
   while (true) {
-    std::cout << kHelloText << "\n: ";
-    std::cout.flush();
-    std::string operation;
-    std::cin >> operation;
+    auto operation = RequestStringInput(kProgramFeaturesPrompt);
 
     if (operation == "exit") {
       break;

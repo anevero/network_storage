@@ -14,3 +14,13 @@ void SendMessage(int socket_fd, const Message& message) {
               << " The message will be corrupted\n";
   }
 }
+
+std::string RequestStringInput(absl::string_view prompt) {
+  std::cout << prompt << "\n: ";
+  std::cout.flush();
+  std::string input;
+  while (input.empty()) {
+    std::getline(std::cin, input, '\n');
+  }
+  return input;
+}

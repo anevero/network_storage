@@ -31,7 +31,10 @@ cc_library(
     name = "utils",
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
-    deps = [":message_cc_proto"],
+    deps = [
+        ":message_cc_proto",
+        "@absl//absl/strings",
+    ],
 )
 
 cc_library(
