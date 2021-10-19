@@ -19,23 +19,35 @@
 
 namespace {
 
-void HandleGenerateRsaKeysOperation(std::string* rsa_public_key,
-                                    std::string* rsa_private_key) {
+// All the handlers for the client-requested operations are defined in this
+// unnamed namespace. All the handlers return a WaitForServerResponse value
+// indicating if we need to wait for some response from the server or if we can
+// continue to the next operations from the user side.
+
+enum class WaitForServerResponse {
+  kEnabled,
+  kDisabled
+};
+
+WaitForServerResponse HandleGenerateRsaKeysOperation(
+    std::string* rsa_public_key, std::string* rsa_private_key) {
   if (!rsa_public_key->empty() && !rsa_private_key->empty()) {
     std::cout << "RSA keys already exist." << std::endl;
-    return;
+    return WaitForServerResponse::kDisabled;
   }
 
   auto key_pair = GenerateRsaKeyPair();
   *rsa_public_key = std::move(key_pair.public_key);
   *rsa_private_key = std::move(key_pair.private_key);
+
+  return WaitForServerResponse::kDisabled;
 }
 
-void HandleLoadRsaKeysOperation(std::string* rsa_public_key,
-                                std::string* rsa_private_key) {
+WaitForServerResponse HandleLoadRsaKeysOperation(
+    std::string* rsa_public_key, std::string* rsa_private_key) {
   if (!rsa_public_key->empty() && !rsa_private_key->empty()) {
     std::cout << "RSA keys already exist." << std::endl;
-    return;
+    return WaitForServerResponse::kDisabled;
   }
 
   auto public_key_filename = RequestStringInput(
@@ -52,10 +64,12 @@ void HandleLoadRsaKeysOperation(std::string* rsa_public_key,
   std::stringstream private_key_buffer;
   private_key_buffer << private_key_file.rdbuf();
   *rsa_private_key = private_key_buffer.str();
+
+  return WaitForServerResponse::kDisabled;
 }
 
-void HandleSaveRsaKeysOperation(const std::string& rsa_public_key,
-                                const std::string& rsa_private_key) {
+WaitForServerResponse HandleSaveRsaKeysOperation(
+    const std::string& rsa_public_key, const std::string& rsa_private_key) {
   auto public_key_filename = RequestStringInput(
       "Enter the public key filename");
   auto private_key_filename = RequestStringInput(
@@ -66,13 +80,15 @@ void HandleSaveRsaKeysOperation(const std::string& rsa_public_key,
 
   std::ofstream private_key_file(private_key_filename);
   private_key_file << rsa_private_key;
+
+  return WaitForServerResponse::kDisabled;
 }
 
-bool HandleSendRsaPublicKeyOperation(int socket_fd,
-                                     const std::string& rsa_public_key) {
+WaitForServerResponse HandleSendRsaPublicKeyOperation(
+    int socket_fd, const std::string& rsa_public_key) {
   if (rsa_public_key.empty()) {
     std::cout << "Please load or generate key pair firstly." << std::endl;
-    return false;
+    return WaitForServerResponse::kDisabled;
   }
 
   RsaPublicKey rsa_public_key_proto;
@@ -81,26 +97,35 @@ bool HandleSendRsaPublicKeyOperation(int socket_fd,
   *message.mutable_rsa_public_key() = std::move(rsa_public_key_proto);
   SendMessage(socket_fd, message);
 
-  return true;
+  return WaitForServerResponse::kEnabled;
 }
 
-void HandleUpdateSessionKeyOperation(int socket_fd) {
+WaitForServerResponse HandleUpdateSessionKeyOperation(int socket_fd) {
   SessionKey session_key_proto;
   Message message_to_send;
   *message_to_send.mutable_session_key() = std::move(session_key_proto);
   SendMessage(socket_fd, message_to_send);
+  return WaitForServerResponse::kEnabled;
 }
 
-void HandleSetPasswordOperation(std::string* password_hash_key) {
+WaitForServerResponse HandleSetPasswordOperation(
+    std::string* password_hash_key) {
   auto password = RequestStringInput("Enter new password");
   *password_hash_key = GetSha256Hash(password);
+  return WaitForServerResponse::kDisabled;
 }
 
-bool HandleGetDataOperation(int socket_fd,
-                            const std::string& aes_encryption_key) {
+WaitForServerResponse HandleResetPasswordOperation(
+    std::string* password_hash_key) {
+  *password_hash_key = "dshflshfg7598vn7435342nqwe57vnw5";
+  return WaitForServerResponse::kDisabled;
+}
+
+WaitForServerResponse HandleGetDataOperation(
+    int socket_fd, const std::string& aes_encryption_key) {
   if (aes_encryption_key.empty()) {
     std::cout << "Please update yor session key firstly." << std::endl;
-    return false;
+    return WaitForServerResponse::kDisabled;
   }
 
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
@@ -118,15 +143,16 @@ bool HandleGetDataOperation(int socket_fd,
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
-  return true;
+  return WaitForServerResponse::kEnabled;
 }
 
-bool HandleUpdateDataOperation(int socket_fd,
-                               const std::string& aes_encryption_key,
-                               const std::string& password_hash_key) {
+WaitForServerResponse HandleUpdateDataOperation(
+    int socket_fd,
+    const std::string& aes_encryption_key,
+    const std::string& password_hash_key) {
   if (aes_encryption_key.empty()) {
     std::cout << "Please update yor session key firstly." << std::endl;
-    return false;
+    return WaitForServerResponse::kDisabled;
   }
 
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
@@ -155,14 +181,14 @@ bool HandleUpdateDataOperation(int socket_fd,
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
-  return true;
+  return WaitForServerResponse::kEnabled;
 }
 
-bool HandleDeleteDataOperation(int socket_fd,
-                               const std::string& aes_encryption_key) {
+WaitForServerResponse HandleDeleteDataOperation(
+    int socket_fd, const std::string& aes_encryption_key) {
   if (aes_encryption_key.empty()) {
     std::cout << "Please update yor session key firstly." << std::endl;
-    return false;
+    return WaitForServerResponse::kDisabled;
   }
 
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
@@ -180,10 +206,10 @@ bool HandleDeleteDataOperation(int socket_fd,
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
-  return true;
+  return WaitForServerResponse::kEnabled;
 }
 
-}
+}  // namespace
 
 constexpr absl::string_view kProgramFeaturesPrompt = R"(
 Choose an operation from the following:
@@ -232,51 +258,43 @@ int main(int argc, char** argv) {
   std::string rsa_public_key;
   std::string rsa_private_key;
   std::string aes_encryption_key;
-  std::string password_hash_key = std::string(32, 't');
+  std::string password_hash_key;
+  HandleResetPasswordOperation(&password_hash_key);
 
   while (true) {
     auto operation = RequestStringInput(kProgramFeaturesPrompt);
+    WaitForServerResponse status;
 
     if (operation == "exit") {
       break;
-    }
-
-    if (operation == "generate_rsa_keys") {
-      HandleGenerateRsaKeysOperation(&rsa_public_key, &rsa_private_key);
-      continue;
+    } else if (operation == "generate_rsa_keys") {
+      status = HandleGenerateRsaKeysOperation(
+          &rsa_public_key, &rsa_private_key);
     } else if (operation == "load_rsa_keys") {
-      HandleLoadRsaKeysOperation(&rsa_public_key, &rsa_private_key);
-      continue;
+      status = HandleLoadRsaKeysOperation(&rsa_public_key, &rsa_private_key);
     } else if (operation == "save_rsa_keys") {
-      HandleSaveRsaKeysOperation(rsa_public_key, rsa_private_key);
-      continue;
+      status = HandleSaveRsaKeysOperation(rsa_public_key, rsa_private_key);
     } else if (operation == "send_rsa_public_key") {
-      if (!HandleSendRsaPublicKeyOperation(socket_fd, rsa_public_key)) {
-        continue;
-      }
+      status = HandleSendRsaPublicKeyOperation(socket_fd, rsa_public_key);
     } else if (operation == "update_session_key") {
-      HandleUpdateSessionKeyOperation(socket_fd);
+      status = HandleUpdateSessionKeyOperation(socket_fd);
     } else if (operation == "set_password") {
-      HandleSetPasswordOperation(&password_hash_key);
-      continue;
+      status = HandleSetPasswordOperation(&password_hash_key);
     } else if (operation == "reset_password") {
-      password_hash_key = std::string(32, 't');
-      continue;
+      status = HandleResetPasswordOperation(&password_hash_key);
     } else if (operation == "get_data") {
-      if (!HandleGetDataOperation(socket_fd, aes_encryption_key)) {
-        continue;
-      }
+      status = HandleGetDataOperation(socket_fd, aes_encryption_key);
     } else if (operation == "update_data") {
-      if (!HandleUpdateDataOperation(
-          socket_fd, aes_encryption_key, password_hash_key)) {
-        continue;
-      }
+      status = HandleUpdateDataOperation(
+          socket_fd, aes_encryption_key, password_hash_key);
     } else if (operation == "delete_data") {
-      if (!HandleDeleteDataOperation(socket_fd, aes_encryption_key)) {
-        continue;
-      }
+      status = HandleDeleteDataOperation(socket_fd, aes_encryption_key);
     } else {
       std::cout << "Unsupported operation." << std::endl;
+      continue;
+    }
+
+    if (status == WaitForServerResponse::kDisabled) {
       continue;
     }
 
