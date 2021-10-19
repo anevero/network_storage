@@ -208,9 +208,6 @@ void Connection::HandleFileOperationMessage(const FileOperation& file_operation)
         decrypted_filename, decrypted_content,
         file_operation.content_encryption_init_vector());
 
-    std::cout << "Updated the file.\n" << "Name: " << decrypted_filename
-              << "\nContent: " << decrypted_content << std::endl;
-
     SendOkMessage("Successfully updated the file", socket_fd_);
     return;
   }
