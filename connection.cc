@@ -115,8 +115,8 @@ void Connection::HandleReceivedMessage(const Message& message) {
   if (message.has_session_key()) {
     return HandleSessionKeyMessage(message.session_key());
   }
-  if (message.has_file_operation()) {
-    return HandleFileOperationMessage(message.file_operation());
+  if (message.has_data_operation()) {
+    return HandleDataOperationMessage(message.data_operation());
   }
 
   SendErrorMessage(ErrorInfo::UNEXPECTED_MESSAGE,
@@ -158,69 +158,68 @@ void Connection::HandleSessionKeyMessage(const SessionKey& session_key) {
   SendMessage(socket_fd_, message_to_send);
 }
 
-void Connection::HandleFileOperationMessage(const FileOperation& file_operation) {
+void Connection::HandleDataOperationMessage(const DataOperation& data_operation) {
   const auto& client_message_init_vector =
-      file_operation.message_encryption_init_vector();
-  const auto& client_encrypted_filename = file_operation.filename();
-  auto decrypted_filename = DecryptStringWithAesCbcCipher(
-      client_encrypted_filename,
-      aes_encryption_key_, client_message_init_vector);
+      data_operation.message_encryption_init_vector();
+  const auto& client_encrypted_key = data_operation.key();
+  auto decrypted_key = DecryptStringWithAesCbcCipher(
+      client_encrypted_key, aes_encryption_key_, client_message_init_vector);
 
-  auto operation_type = file_operation.type();
+  auto operation_type = data_operation.type();
 
-  if (operation_type == FileOperation::GET) {
+  if (operation_type == DataOperation::GET) {
     auto content =
-        storage_->at(rsa_public_key_)->GetFileContents(decrypted_filename);
+        storage_->at(rsa_public_key_)->GetData(decrypted_key);
     if (!content.has_value()) {
-      SendErrorMessage(ErrorInfo::FILE_NOT_FOUND,
-                       "File with the received name not found. Please create it before querying it.",
+      SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
+                       "No data found by the received key.",
                        socket_fd_);
       return;
     }
 
     auto server_encryption_init_vector = Generate128BitKey();
-    auto server_encrypted_filename = EncryptStringWithAesCbcCipher(
-        decrypted_filename, aes_encryption_key_, server_encryption_init_vector);
+    auto server_encrypted_key = EncryptStringWithAesCbcCipher(
+        decrypted_key, aes_encryption_key_, server_encryption_init_vector);
     auto server_encrypted_content = EncryptStringWithAesCbcCipher(
         content.value().content,
         aes_encryption_key_, server_encryption_init_vector);
 
-    FileOperation file_operation_to_send;
-    file_operation_to_send.set_filename(server_encrypted_filename);
-    file_operation_to_send.set_content(server_encrypted_content);
-    file_operation_to_send.set_message_encryption_init_vector(
+    DataOperation data_operation_to_send;
+    data_operation_to_send.set_key(server_encrypted_key);
+    data_operation_to_send.set_content(server_encrypted_content);
+    data_operation_to_send.set_message_encryption_init_vector(
         server_encryption_init_vector);
-    file_operation_to_send.set_content_encryption_init_vector(
+    data_operation_to_send.set_content_encryption_init_vector(
         content.value().init_vector);
 
     Message message_to_send;
-    *message_to_send.mutable_file_operation() =
-        std::move(file_operation_to_send);
+    *message_to_send.mutable_data_operation() =
+        std::move(data_operation_to_send);
     SendMessage(socket_fd_, message_to_send);
     return;
   }
 
-  if (operation_type == FileOperation::UPDATE) {
+  if (operation_type == DataOperation::UPDATE) {
     auto decrypted_content = DecryptStringWithAesCbcCipher(
-        file_operation.content(),
+        data_operation.content(),
         aes_encryption_key_, client_message_init_vector);
-    storage_->at(rsa_public_key_)->PutFile(
-        decrypted_filename, decrypted_content,
-        file_operation.content_encryption_init_vector());
+    storage_->at(rsa_public_key_)->PutData(
+        decrypted_key, decrypted_content,
+        data_operation.content_encryption_init_vector());
 
-    SendOkMessage("Successfully updated the file", socket_fd_);
+    SendOkMessage("Successfully updated the data", socket_fd_);
     return;
   }
 
-  if (operation_type == FileOperation::DELETE) {
+  if (operation_type == DataOperation::DELETE) {
     auto status =
-        storage_->at(rsa_public_key_)->RemoveFile(decrypted_filename);
+        storage_->at(rsa_public_key_)->RemoveData(decrypted_key);
     if (!status.ok()) {
-      SendErrorMessage(ErrorInfo::FILE_NOT_FOUND,
-                       "File with the received name not found. Please create it before querying it.",
+      SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
+                       "No data found by the received key.",
                        socket_fd_);
     } else {
-      SendOkMessage("Successfully deleted the file", socket_fd_);
+      SendOkMessage("Successfully deleted the data", socket_fd_);
     }
     return;
   }

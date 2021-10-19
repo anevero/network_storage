@@ -43,9 +43,9 @@ class Connection {
   // sends it to the caller.
   void HandleSessionKeyMessage(const SessionKey& session_key);
 
-  // Handles a message with the file operation. Performs necessary storage
+  // Handles a message with the data operation. Performs necessary storage
   // operations and returns OK, an error or some content to the caller.
-  void HandleFileOperationMessage(const FileOperation& file_operation);
+  void HandleDataOperationMessage(const DataOperation& data_operation);
 
  private:
   const int socket_fd_;

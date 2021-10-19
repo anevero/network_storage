@@ -5,8 +5,7 @@ algorithms. The aim of the project is to create protected network storage. The
 implementation is divided into two parts. The server part should run on some
 remote server. It accepts messages from the clients and stores their string
 data (in memory). The client part can run anywhere else. It connects to the
-server and can interact with it by sending or receiving strings (which are
-called files in the code).
+server and can interact with it by sending or receiving strings.
 
 # Used algorithms
 
@@ -23,41 +22,40 @@ AES-256-CBC encryption key. This key is temporary and will expire in an hour.
 Then the server encrypts the session key with the client public RSA key, and
 sends everything to the client.
 
-- The client requests some operation with the storage, providing a file name
-and, possibly, file content (both encrypted using AES-256-CBC with the session
-key and a random initialization vector). To ensure the file will not be
+- The client requests some operation with the storage, providing a key and,
+possibly, some content (both encrypted using AES-256-CBC with the session
+key and a random initialization vector). To ensure the content will not be
 available to an attacker who has access to the server storage, it additionally
-encrypts the file content using AES-256-CBC with SHA-256 hash of the client
-local password as a key and a random initialization vector. The filenames are
-also not passed to the server in the original form, their SHA-256 hashes are
-used instead.
+encrypts it using AES-256-CBC with SHA-256 hash of the client local password as
+a key and a random initialization vector. The keys are also not passed to the
+server in the original form, their SHA-256 hashes are used instead.
 
-- The server receives the request, decrypts the filename and, possible, file
-content (using the session key), and performs the requested operation (for
-example, updating or deleting the file). If necessary, it returns some content
+- The server receives the request, decrypts the key and, possibly, the content
+(using the session key), and performs the requested operation (for example,
+updating or deleting the data). If necessary, it returns some content
 to the client (encrypting it using AES-256-CBC with the session key and a random
 initialization vector).
 
 Generally, this flow provides the following guarantees:
 
 - MITM attacks on any stage of the process will be unsuccessfull. No information
-about the client files (including, for example, the information on whether the
-client requests updating the same file several times, or whether the different
-clients have files with the same names or content) will be available to the
+about the client data (including, for example, the information on whether the
+client requests updating the data by the same key several times, or whether the
+different clients have data with the same keys or content) will be leaked to the
 attacker. This is achieved by using the RSA algorithm for the initial
 authorization, and the AES-256-CBC algorithm for all the next steps.
 
 - The only information the attacker having read access to the server can
-extract is whether the client requests updating the same file several times, or
-whether the different clients have files with the same names. No other
-information (including real file names, or any information regarding files
-content) will be available to the attacker. This is achieved by hashing files
-names using the SHA-256 algorithm, and encrypting files content using the
-AES-256-CBC algorithm with local user password (not known to the server) as a
-key on the client side.
+extract is whether the client requests updating the data by the same key several
+times, or whether the different clients have keys with the same names. No other
+information (including real keys' names, or any information regarding the 
+content) will be leaked to the attacker. This is achieved by hashing keys using
+the SHA-256 algorithm, and encrypting the content using the AES-256-CBC
+algorithm with local user password (not known to the server) as a key on the
+client side.
 
 It's important to note that if the client loses theirs local password,
-the files' recovery will be impossible due to the nature of the used algorithms.
+the data recovery will be impossible due to the nature of the used algorithms.
 
 # Build instructions
 

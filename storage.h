@@ -7,7 +7,7 @@
 
 class Storage {
  public:
-  struct File {
+  struct Data {
     std::string content;
     std::string init_vector;
   };
@@ -18,23 +18,22 @@ class Storage {
   Storage(const Storage&) = delete;
   Storage& operator=(const Storage&) = delete;
 
-  // Registers specified content with the specified filename. If some
-  // content is already registered with this filename, overrides it.
-  void PutFile(const std::string& filename,
+  // Registers specified content with the specified key. If some content is
+  // already registered with this key, overrides it.
+  void PutData(const std::string& key,
                const std::string& content,
                const std::string& init_vector);
 
-  // Removes content registered by the specified filename. If this filename is
-  // not registered, returns NotFound error.
-  absl::Status RemoveFile(const std::string& filename);
+  // Removes content registered by the specified key. If this key is not
+  // registered, returns NotFound error.
+  absl::Status RemoveData(const std::string& key);
 
-  // Returns content registered with the specified filename. If no content is
-  // found by this filename, returns absl::nullopt.
-  absl::optional<File> GetFileContents(const std::string& filename) const;
+  // Returns content registered with the specified key. If no content is found
+  // by this key, returns absl::nullopt.
+  absl::optional<Data> GetData(const std::string& key) const;
 
  private:
-  // Maps filenames to contents.
-  absl::flat_hash_map<std::string, File> map_;
+  absl::flat_hash_map<std::string, Data> map_;
 };
 
 #endif  // STORAGE_H_

@@ -114,39 +114,38 @@ void HandleSetPasswordOperation(std::string* password_hash_key) {
   *password_hash_key = GetSha256Hash(password);
 }
 
-bool HandleGetFileOperation(int socket_fd,
+bool HandleGetDataOperation(int socket_fd,
                             const std::string& aes_encryption_key) {
   if (aes_encryption_key.empty()) {
     std::cout << "Please update yor session key firstly." << std::endl;
     return false;
   }
 
-  std::cout << "Enter the filename: ";
-  std::string filename;
-  while (filename.empty()) {
-    std::getline(std::cin, filename, '\n');
+  std::cout << "Enter the key: ";
+  std::string key;
+  while (key.empty()) {
+    std::getline(std::cin, key, '\n');
   }
-  filename = GetSha256Hash(filename);
+  key = GetSha256Hash(key);
 
   auto message_encryption_init_vector = Generate128BitKey();
-  auto encrypted_filename = EncryptStringWithAesCbcCipher(
-      filename, aes_encryption_key, message_encryption_init_vector);
+  auto encrypted_key = EncryptStringWithAesCbcCipher(
+      key, aes_encryption_key, message_encryption_init_vector);
 
-  FileOperation file_operation_proto;
-  file_operation_proto.set_type(FileOperation::GET);
-  file_operation_proto.set_filename(encrypted_filename);
-  file_operation_proto.set_message_encryption_init_vector(
+  DataOperation data_operation_proto;
+  data_operation_proto.set_type(DataOperation::GET);
+  data_operation_proto.set_key(encrypted_key);
+  data_operation_proto.set_message_encryption_init_vector(
       message_encryption_init_vector);
 
   Message message_to_send;
-  *message_to_send.mutable_file_operation() =
-      std::move(file_operation_proto);
+  *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
   return true;
 }
 
-bool HandleUpdateFileOperation(int socket_fd,
+bool HandleUpdateDataOperation(int socket_fd,
                                const std::string& aes_encryption_key,
                                const std::string& password_hash_key) {
   if (aes_encryption_key.empty()) {
@@ -154,12 +153,12 @@ bool HandleUpdateFileOperation(int socket_fd,
     return false;
   }
 
-  std::cout << "Enter the filename: ";
-  std::string filename;
-  while (filename.empty()) {
-    std::getline(std::cin, filename, '\n');
+  std::cout << "Enter the key: ";
+  std::string key;
+  while (key.empty()) {
+    std::getline(std::cin, key, '\n');
   }
-  filename = GetSha256Hash(filename);
+  key = GetSha256Hash(key);
 
   std::cout << "Enter the content: ";
   std::string content;
@@ -170,57 +169,55 @@ bool HandleUpdateFileOperation(int socket_fd,
   auto message_encryption_init_vector = Generate128BitKey();
   auto content_encryption_init_vector = Generate128BitKey();
 
-  auto encrypted_filename = EncryptStringWithAesCbcCipher(
-      filename, aes_encryption_key, message_encryption_init_vector);
+  auto encrypted_key = EncryptStringWithAesCbcCipher(
+      key, aes_encryption_key, message_encryption_init_vector);
   auto encrypted_content = EncryptStringWithAesCbcCipher(
       content, password_hash_key, content_encryption_init_vector);
   encrypted_content = EncryptStringWithAesCbcCipher(
       encrypted_content, aes_encryption_key, message_encryption_init_vector);
 
-  FileOperation file_operation_proto;
-  file_operation_proto.set_type(FileOperation::UPDATE);
-  file_operation_proto.set_filename(encrypted_filename);
-  file_operation_proto.set_content(encrypted_content);
-  file_operation_proto.set_message_encryption_init_vector(
+  DataOperation data_operation_proto;
+  data_operation_proto.set_type(DataOperation::UPDATE);
+  data_operation_proto.set_key(encrypted_key);
+  data_operation_proto.set_content(encrypted_content);
+  data_operation_proto.set_message_encryption_init_vector(
       message_encryption_init_vector);
-  file_operation_proto.set_content_encryption_init_vector(
+  data_operation_proto.set_content_encryption_init_vector(
       content_encryption_init_vector);
 
   Message message_to_send;
-  *message_to_send.mutable_file_operation() =
-      std::move(file_operation_proto);
+  *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
   return true;
 }
 
-bool HandleDeleteFileOperation(int socket_fd,
+bool HandleDeleteDataOperation(int socket_fd,
                                const std::string& aes_encryption_key) {
   if (aes_encryption_key.empty()) {
     std::cout << "Please update yor session key firstly." << std::endl;
     return false;
   }
 
-  std::cout << "Enter the filename: ";
-  std::string filename;
-  while (filename.empty()) {
-    std::getline(std::cin, filename, '\n');
+  std::cout << "Enter the key: ";
+  std::string key;
+  while (key.empty()) {
+    std::getline(std::cin, key, '\n');
   }
-  filename = GetSha256Hash(filename);
+  key = GetSha256Hash(key);
 
   auto message_encryption_init_vector = Generate128BitKey();
-  auto encrypted_filename = EncryptStringWithAesCbcCipher(
-      filename, aes_encryption_key, message_encryption_init_vector);
+  auto encrypted_key = EncryptStringWithAesCbcCipher(
+      key, aes_encryption_key, message_encryption_init_vector);
 
-  FileOperation file_operation_proto;
-  file_operation_proto.set_type(FileOperation::DELETE);
-  file_operation_proto.set_filename(encrypted_filename);
-  file_operation_proto.set_message_encryption_init_vector(
+  DataOperation data_operation_proto;
+  data_operation_proto.set_type(DataOperation::DELETE);
+  data_operation_proto.set_key(encrypted_key);
+  data_operation_proto.set_message_encryption_init_vector(
       message_encryption_init_vector);
 
   Message message_to_send;
-  *message_to_send.mutable_file_operation() =
-      std::move(file_operation_proto);
+  *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
   SendMessage(socket_fd, message_to_send);
 
   return true;
@@ -234,7 +231,7 @@ Choose an operation from the following:
 - send_rsa_public_key
 - update_session_key
 - set_password / reset_password
-- get_file / update_file / delete_file
+- get_data / update_data / delete_data
 - exit)";
 
 constexpr absl::string_view kHelpText = R"(
@@ -308,17 +305,17 @@ int main(int argc, char** argv) {
     } else if (operation == "reset_password") {
       password_hash_key = std::string(32, 't');
       continue;
-    } else if (operation == "get_file") {
-      if (!HandleGetFileOperation(socket_fd, aes_encryption_key)) {
+    } else if (operation == "get_data") {
+      if (!HandleGetDataOperation(socket_fd, aes_encryption_key)) {
         continue;
       }
-    } else if (operation == "update_file") {
-      if (!HandleUpdateFileOperation(
+    } else if (operation == "update_data") {
+      if (!HandleUpdateDataOperation(
           socket_fd, aes_encryption_key, password_hash_key)) {
         continue;
       }
-    } else if (operation == "delete_file") {
-      if (!HandleDeleteFileOperation(socket_fd, aes_encryption_key)) {
+    } else if (operation == "delete_data") {
+      if (!HandleDeleteDataOperation(socket_fd, aes_encryption_key)) {
         continue;
       }
     } else {
@@ -369,23 +366,22 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    if (received_message.has_file_operation()) {
-      std::cout << "Received a message with file content:" << std::endl;
+    if (received_message.has_data_operation()) {
+      std::cout << "Received a message with the content" << std::endl;
       auto decrypted_content = DecryptStringWithAesCbcCipher(
-          received_message.file_operation().content(),
+          received_message.data_operation().content(),
           aes_encryption_key,
-          received_message.file_operation().message_encryption_init_vector());
+          received_message.data_operation().message_encryption_init_vector());
 
       try {
         decrypted_content = DecryptStringWithAesCbcCipher(
-            decrypted_content,
-            password_hash_key,
-            received_message.file_operation().content_encryption_init_vector());
+            decrypted_content, password_hash_key,
+            received_message.data_operation().content_encryption_init_vector());
         std::cout << decrypted_content << std::endl;
       } catch (...) {
         std::cout << "Decryption error occurred. "
-                  << "Probably, the received file was encrypted with a different password. "
-                  << "Please set the necessary password before requesting this file."
+                  << "Probably, the received data was encrypted with a different password. "
+                  << "Please set the necessary password before requesting this data."
                   << std::endl;
       }
 

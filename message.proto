@@ -2,7 +2,7 @@ syntax = "proto3";
 
 message Message {
   oneof payload {
-    FileOperation file_operation = 1;
+    DataOperation data_operation = 1;
     OkInfo ok_info = 2;
     ErrorInfo error_info = 3;
     SessionKey session_key = 4;
@@ -10,7 +10,7 @@ message Message {
   }
 }
 
-message FileOperation {
+message DataOperation {
   enum Type {
     GET = 0;
     UPDATE = 1;
@@ -18,16 +18,17 @@ message FileOperation {
   }
   // Type of the operation. Set by the client, not set by the server.
   Type type = 1;
-  // Initialization vector used to encrypt this message (filename and content).
-  // A session key (known by both server and client) is used as a key in this
-  // case.
+  // Initialization vector used to encrypt this message (key and content).
+  // A session key (known by both server and client) is used as an encryption
+  // key in this case.
   bytes message_encryption_init_vector = 2;
   // Initialization vector used to encrypt the content of the message. The
-  // client's secret key, which is not known by the server, is used as a key in
-  // this case. Necessary for client to decrypt the content after receiving it
-  // from the server (the client doesn't save this initialization vectors).
+  // client's secret key, which is not known by the server, is used as an
+  // encryption key in this case. Necessary for client to decrypt the content
+  // after receiving it from the server (the client doesn't save this
+  // initialization vectors).
   bytes content_encryption_init_vector = 3;
-  bytes filename = 4;
+  bytes key = 4;
   bytes content = 5;
 }
 
@@ -37,7 +38,7 @@ message OkInfo {
 
 message ErrorInfo {
   enum Type {
-    FILE_NOT_FOUND = 0;
+    DATA_NOT_FOUND = 0;
     NO_VALID_SESSION_KEY = 1;
     NO_VALID_RSA_PUBLIC_KEY = 2;
     MESSAGE_CORRUPTED = 3;
