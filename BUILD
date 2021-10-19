@@ -14,7 +14,7 @@ cc_proto_library(
 cc_import(
     name = "cryptopp",
     hdrs = glob(["cryptopp/*.h"]),
-    static_library = "libcryptopp.a",
+    shared_library = "cryptopp/libcryptopp.so.8",
 )
 
 cc_library(
