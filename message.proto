@@ -45,6 +45,7 @@ message Info {
     NO_VALID_RSA_PUBLIC_KEY_ERROR = 3;
     MESSAGE_CORRUPTED_ERROR = 4;
     UNEXPECTED_MESSAGE_ERROR = 5;
+    INTERNAL_SERVER_ERROR = 6;
   }
   Status status = 1;
   string description = 2;

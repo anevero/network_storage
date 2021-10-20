@@ -87,10 +87,13 @@ absl::Status EncryptAndSendMessage(const Message& message, int socket_fd,
   auto init_vector = Generate128BitKey();
   auto encrypted_message_str = EncryptStringWithAesCbcCipher(
       message_str, aes_encryption_key, init_vector);
+  if (!encrypted_message_str.ok()) {
+    return encrypted_message_str.status();
+  }
 
   MessageWrapper message_wrapper;
   message_wrapper.set_aes_init_vector(init_vector);
-  message_wrapper.set_message(encrypted_message_str);
+  message_wrapper.set_message(*encrypted_message_str);
 
   return SendMessageWrapper(message_wrapper, socket_fd);
 }
@@ -104,8 +107,12 @@ absl::StatusOr<Message> ReceiveAndDecryptMessage(
 
   auto message_str = message_wrapper->message();
   if (!message_wrapper->aes_init_vector().empty()) {
-    message_str = DecryptStringWithAesCbcCipher(
+    auto decrypted_message_str = DecryptStringWithAesCbcCipher(
         message_str, aes_encryption_key, message_wrapper->aes_init_vector());
+    if (!decrypted_message_str.ok()) {
+      return decrypted_message_str.status();
+    }
+    message_str = *decrypted_message_str;
   }
 
   Message message;

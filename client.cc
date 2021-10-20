@@ -35,8 +35,12 @@ WaitForServerResponse HandleGenerateRsaKeysOperation(
   }
 
   auto key_pair = GenerateRsaKeyPair();
-  *rsa_public_key = std::move(key_pair.public_key);
-  *rsa_private_key = std::move(key_pair.private_key);
+  if (!key_pair.ok()) {
+    std::cout << key_pair.status() << std::endl;
+  } else {
+    *rsa_public_key = std::move(key_pair->public_key);
+    *rsa_private_key = std::move(key_pair->private_key);
+  }
 
   return WaitForServerResponse::kDisabled;
 }
@@ -166,11 +170,15 @@ WaitForServerResponse HandleUpdateDataOperation(
   auto content_encryption_init_vector = Generate128BitKey();
   auto encrypted_content = EncryptStringWithAesCbcCipher(
       content, password_hash_key, content_encryption_init_vector);
+  if (!encrypted_content.ok()) {
+    std::cout << encrypted_content.status() << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
 
   DataOperation data_operation_proto;
   data_operation_proto.set_type(DataOperation::UPDATE);
   data_operation_proto.set_key(key);
-  data_operation_proto.set_content(encrypted_content);
+  data_operation_proto.set_content(*encrypted_content);
   data_operation_proto.set_content_encryption_init_vector(
       content_encryption_init_vector);
 
@@ -306,10 +314,15 @@ int main(int argc, char** argv) {
 
     if (received_message->has_session_key()) {
       std::cout << "Received a message with the session key." << std::endl;
-      auto& encrypted_aes_encryption_key =
+      auto& encrypted_encryption_key =
           received_message->session_key().encryption_key();
-      aes_encryption_key = DecryptStringWithRsaPrivateKey(
-          encrypted_aes_encryption_key, rsa_private_key);
+      auto encryption_key = DecryptStringWithRsaPrivateKey(
+          encrypted_encryption_key, rsa_private_key);
+      if (!encryption_key.ok()) {
+        std::cout << encryption_key.status() << std::endl;
+      } else {
+        aes_encryption_key = *encryption_key;
+      }
       continue;
     }
 
@@ -324,16 +337,16 @@ int main(int argc, char** argv) {
 
     if (received_message->has_data_operation()) {
       std::cout << "Received a message with the content" << std::endl;
-      try {
-        auto decrypted_content = DecryptStringWithAesCbcCipher(
-            received_message->data_operation().content(), password_hash_key,
-            received_message->data_operation().content_encryption_init_vector());
-        std::cout << decrypted_content << std::endl;
-      } catch (...) {
-        std::cout << "Decryption error occurred. "
-                  << "Probably, the received data was encrypted with a different password. "
-                  << "Please set the necessary password before requesting this data."
-                  << std::endl;
+      auto decrypted_content = DecryptStringWithAesCbcCipher(
+          received_message->data_operation().content(), password_hash_key,
+          received_message->data_operation().content_encryption_init_vector());
+      if (!decrypted_content.ok()) {
+        std::cout << decrypted_content.status() << std::endl;
+        std::cout
+            << "Probably, you need to use another password to correctly decrypt this data."
+            << std::endl;
+      } else {
+        std::cout << *decrypted_content << std::endl;
       }
       continue;
     }

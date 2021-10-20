@@ -24,6 +24,7 @@ cc_library(
     deps = [
         ":cryptopp",
         "@absl//absl/random",
+        "@absl//absl/status:statusor",
     ],
 )
 

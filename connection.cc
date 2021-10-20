@@ -121,13 +121,19 @@ void Connection::HandleSessionKeyMessage(const SessionKey& session_key) {
   aes_encryption_key_ = Generate256BitKey();
   auto encrypted_aes_encryption_key =
       EncryptStringWithRsaPublicKey(aes_encryption_key_, rsa_public_key_);
+  if (!encrypted_aes_encryption_key.ok()) {
+    SendInfoMessage(Info::INTERNAL_SERVER_ERROR,
+                    "Server error occurred when trying to encrypt the session key.",
+                    socket_fd_);
+    return;
+  }
 
   int64_t current_time =
       std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
   aes_key_expiration_time_ = current_time + 60 * 60;  // 1 hour from now
 
   SessionKey session_key_proto;
-  session_key_proto.set_encryption_key(encrypted_aes_encryption_key);
+  session_key_proto.set_encryption_key(*encrypted_aes_encryption_key);
   session_key_proto.set_expiration_time(aes_key_expiration_time_);
 
   Message message_to_send;
