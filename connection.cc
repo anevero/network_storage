@@ -15,24 +15,15 @@
 
 namespace {
 
-void SendErrorMessage(ErrorInfo::Type error_type,
-                      const std::string& description,
-                      int socket_fd) {
-  ErrorInfo error_info;
-  error_info.set_type(error_type);
-  error_info.set_description(description);
+void SendInfoMessage(Info::Status status,
+                     const std::string& description,
+                     int socket_fd) {
+  Info info;
+  info.set_status(status);
+  info.set_description(description);
 
   Message message_to_send;
-  *message_to_send.mutable_error_info() = std::move(error_info);
-  SendUnencryptedMessage(message_to_send, socket_fd).IgnoreError();
-}
-
-void SendOkMessage(const std::string& description,
-                   int socket_fd) {
-  OkInfo ok_info;
-  ok_info.set_description(description);
-  Message message_to_send;
-  *message_to_send.mutable_ok_info() = std::move(ok_info);
+  *message_to_send.mutable_info() = std::move(info);
   SendUnencryptedMessage(message_to_send, socket_fd).IgnoreError();
 }
 
@@ -77,9 +68,9 @@ void Connection::RunEventLoop() {
 
 void Connection::HandleReceivedMessage(const Message& message) {
   if (rsa_public_key_.empty() && !message.has_rsa_public_key()) {
-    SendErrorMessage(ErrorInfo::NO_VALID_RSA_PUBLIC_KEY,
-                     "Authentication is not completed yet. Server is expecting a message with the RSA public key.",
-                     socket_fd_);
+    SendInfoMessage(Info::NO_VALID_RSA_PUBLIC_KEY_ERROR,
+                    "Authentication is not completed yet. Server is expecting a message with the RSA public key.",
+                    socket_fd_);
     return;
   }
 
@@ -88,9 +79,9 @@ void Connection::HandleReceivedMessage(const Message& message) {
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     if (aes_key_expiration_time_ < current_time
         && !message.has_session_key()) {
-      SendErrorMessage(ErrorInfo::NO_VALID_SESSION_KEY,
-                       "No valid session key found. Server is expecting a message requesting a new session key.",
-                       socket_fd_);
+      SendInfoMessage(Info::NO_VALID_SESSION_KEY_ERROR,
+                      "No valid session key found. Server is expecting a message requesting a new session key.",
+                      socket_fd_);
       return;
     }
   }
@@ -105,16 +96,16 @@ void Connection::HandleReceivedMessage(const Message& message) {
     return HandleDataOperationMessage(message.data_operation());
   }
 
-  SendErrorMessage(ErrorInfo::UNEXPECTED_MESSAGE,
-                   "Unexpected type of the message",
-                   socket_fd_);
+  SendInfoMessage(Info::UNEXPECTED_MESSAGE_ERROR,
+                  "Unexpected type of the message",
+                  socket_fd_);
 }
 
 void Connection::HandleRsaKeyMessage(const RsaPublicKey& rsa_public_key) {
   if (!rsa_public_key_.empty()) {
-    SendErrorMessage(ErrorInfo::UNEXPECTED_MESSAGE,
-                     "Authentication is already completed. Server is not expecting a message with the RSA key.",
-                     socket_fd_);
+    SendInfoMessage(Info::UNEXPECTED_MESSAGE_ERROR,
+                    "Authentication is already completed. Server is not expecting a message with the RSA key.",
+                    socket_fd_);
     return;
   }
 
@@ -123,7 +114,7 @@ void Connection::HandleRsaKeyMessage(const RsaPublicKey& rsa_public_key) {
     storage_->emplace(rsa_public_key_, std::make_unique<Storage>());
   }
 
-  SendOkMessage("Received RSA public key", socket_fd_);
+  SendInfoMessage(Info::OK, "Received RSA public key", socket_fd_);
 }
 
 void Connection::HandleSessionKeyMessage(const SessionKey& session_key) {
@@ -150,9 +141,9 @@ void Connection::HandleDataOperationMessage(const DataOperation& data_operation)
   if (operation_type == DataOperation::GET) {
     auto content = storage_->at(rsa_public_key_)->GetData(data_operation.key());
     if (!content.has_value()) {
-      SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
-                       "No data found by the received key.",
-                       socket_fd_);
+      SendInfoMessage(Info::DATA_NOT_FOUND_ERROR,
+                      "No data found by the received key.",
+                      socket_fd_);
       return;
     }
 
@@ -175,7 +166,7 @@ void Connection::HandleDataOperationMessage(const DataOperation& data_operation)
     storage_->at(rsa_public_key_)->PutData(
         data_operation.key(), data_operation.content(),
         data_operation.content_encryption_init_vector());
-    SendOkMessage("Successfully updated the data", socket_fd_);
+    SendInfoMessage(Info::OK, "Successfully updated the data", socket_fd_);
     return;
   }
 
@@ -183,11 +174,11 @@ void Connection::HandleDataOperationMessage(const DataOperation& data_operation)
     auto status =
         storage_->at(rsa_public_key_)->RemoveData(data_operation.key());
     if (!status.ok()) {
-      SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
-                       "No data found by the received key.",
-                       socket_fd_);
+      SendInfoMessage(Info::DATA_NOT_FOUND_ERROR,
+                      "No data found by the received key.",
+                      socket_fd_);
     } else {
-      SendOkMessage("Successfully deleted the data", socket_fd_);
+      SendInfoMessage(Info::OK, "Successfully deleted the data", socket_fd_);
     }
     return;
   }

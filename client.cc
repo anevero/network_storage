@@ -313,18 +313,11 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    if (received_message->has_error_info()) {
-      std::cout << "Received a message with error info of type "
-                << ErrorInfo::Type_Name(received_message->error_info().type())
+    if (received_message->has_info()) {
+      std::cout << "Received a message with info of status "
+                << Info::Status_Name(received_message->info().status())
                 << " and description '"
-                << received_message->error_info().description() << "'."
-                << std::endl;
-      continue;
-    }
-
-    if (received_message->has_ok_info()) {
-      std::cout << "Received a message with OK status and description '"
-                << received_message->ok_info().description() << "'."
+                << received_message->info().description() << "'."
                 << std::endl;
       continue;
     }

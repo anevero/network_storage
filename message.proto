@@ -13,10 +13,9 @@ message MessageWrapper {
 message Message {
   oneof payload {
     DataOperation data_operation = 1;
-    OkInfo ok_info = 2;
-    ErrorInfo error_info = 3;
-    SessionKey session_key = 4;
-    RsaPublicKey rsa_public_key = 5;
+    Info info = 2;
+    SessionKey session_key = 3;
+    RsaPublicKey rsa_public_key = 4;
   }
 }
 
@@ -38,19 +37,16 @@ message DataOperation {
   bytes content_encryption_init_vector = 4;
 }
 
-message OkInfo {
-  string description = 1;
-}
-
-message ErrorInfo {
-  enum Type {
-    DATA_NOT_FOUND = 0;
-    NO_VALID_SESSION_KEY = 1;
-    NO_VALID_RSA_PUBLIC_KEY = 2;
-    MESSAGE_CORRUPTED = 3;
-    UNEXPECTED_MESSAGE = 4;
+message Info {
+  enum Status {
+    OK = 0;
+    DATA_NOT_FOUND_ERROR = 1;
+    NO_VALID_SESSION_KEY_ERROR = 2;
+    NO_VALID_RSA_PUBLIC_KEY_ERROR = 3;
+    MESSAGE_CORRUPTED_ERROR = 4;
+    UNEXPECTED_MESSAGE_ERROR = 5;
   }
-  Type type = 1;
+  Status status = 1;
   string description = 2;
 }
 
