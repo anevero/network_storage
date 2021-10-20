@@ -1,5 +1,15 @@
 syntax = "proto3";
 
+message MessageWrapper {
+  // 128-bit initialization vector for the AES-256-CBC algorithm. Can be
+  // an empty string, in this case we assume that the message is not
+  // encrypted.
+  bytes aes_init_vector = 1;
+
+  // Possibly encrypted binary representation of the Message proto.
+  bytes message = 2;
+}
+
 message Message {
   oneof payload {
     DataOperation data_operation = 1;
@@ -18,18 +28,14 @@ message DataOperation {
   }
   // Type of the operation. Set by the client, not set by the server.
   Type type = 1;
-  // Initialization vector used to encrypt this message (key and content).
-  // A session key (known by both server and client) is used as an encryption
-  // key in this case.
-  bytes message_encryption_init_vector = 2;
+  bytes key = 2;
+  bytes content = 3;
   // Initialization vector used to encrypt the content of the message. The
   // client's secret key, which is not known by the server, is used as an
   // encryption key in this case. Necessary for client to decrypt the content
   // after receiving it from the server (the client doesn't save this
   // initialization vectors).
-  bytes content_encryption_init_vector = 3;
-  bytes key = 4;
-  bytes content = 5;
+  bytes content_encryption_init_vector = 4;
 }
 
 message OkInfo {

@@ -1,8 +1,6 @@
 #include <cstdint>
-#include <cstring>
 #include <iostream>
 #include <fstream>
-#include <memory>
 #include <sstream>
 #include <string>
 
@@ -93,10 +91,14 @@ WaitForServerResponse HandleSendRsaPublicKeyOperation(
 
   RsaPublicKey rsa_public_key_proto;
   rsa_public_key_proto.set_key(rsa_public_key);
-  Message message;
-  *message.mutable_rsa_public_key() = std::move(rsa_public_key_proto);
-  SendMessage(socket_fd, message);
+  Message message_to_send;
+  *message_to_send.mutable_rsa_public_key() = std::move(rsa_public_key_proto);
 
+  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  if (!status.ok()) {
+    std::cout << status << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
   return WaitForServerResponse::kEnabled;
 }
 
@@ -104,7 +106,12 @@ WaitForServerResponse HandleUpdateSessionKeyOperation(int socket_fd) {
   SessionKey session_key_proto;
   Message message_to_send;
   *message_to_send.mutable_session_key() = std::move(session_key_proto);
-  SendMessage(socket_fd, message_to_send);
+
+  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  if (!status.ok()) {
+    std::cout << status << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
   return WaitForServerResponse::kEnabled;
 }
 
@@ -129,20 +136,18 @@ WaitForServerResponse HandleGetDataOperation(
   }
 
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
-  auto message_encryption_init_vector = Generate128BitKey();
-  auto encrypted_key = EncryptStringWithAesCbcCipher(
-      key, aes_encryption_key, message_encryption_init_vector);
-
   DataOperation data_operation_proto;
   data_operation_proto.set_type(DataOperation::GET);
-  data_operation_proto.set_key(encrypted_key);
-  data_operation_proto.set_message_encryption_init_vector(
-      message_encryption_init_vector);
+  data_operation_proto.set_key(key);
 
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
-  SendMessage(socket_fd, message_to_send);
 
+  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  if (!status.ok()) {
+    std::cout << status << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
   return WaitForServerResponse::kEnabled;
 }
 
@@ -158,29 +163,25 @@ WaitForServerResponse HandleUpdateDataOperation(
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
   auto content = RequestStringInput("Enter the content (line)");
 
-  auto message_encryption_init_vector = Generate128BitKey();
   auto content_encryption_init_vector = Generate128BitKey();
-
-  auto encrypted_key = EncryptStringWithAesCbcCipher(
-      key, aes_encryption_key, message_encryption_init_vector);
   auto encrypted_content = EncryptStringWithAesCbcCipher(
       content, password_hash_key, content_encryption_init_vector);
-  encrypted_content = EncryptStringWithAesCbcCipher(
-      encrypted_content, aes_encryption_key, message_encryption_init_vector);
 
   DataOperation data_operation_proto;
   data_operation_proto.set_type(DataOperation::UPDATE);
-  data_operation_proto.set_key(encrypted_key);
+  data_operation_proto.set_key(key);
   data_operation_proto.set_content(encrypted_content);
-  data_operation_proto.set_message_encryption_init_vector(
-      message_encryption_init_vector);
   data_operation_proto.set_content_encryption_init_vector(
       content_encryption_init_vector);
 
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
-  SendMessage(socket_fd, message_to_send);
 
+  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  if (!status.ok()) {
+    std::cout << status << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
   return WaitForServerResponse::kEnabled;
 }
 
@@ -192,20 +193,18 @@ WaitForServerResponse HandleDeleteDataOperation(
   }
 
   auto key = GetSha256Hash(RequestStringInput("Enter the key"));
-  auto message_encryption_init_vector = Generate128BitKey();
-  auto encrypted_key = EncryptStringWithAesCbcCipher(
-      key, aes_encryption_key, message_encryption_init_vector);
-
   DataOperation data_operation_proto;
   data_operation_proto.set_type(DataOperation::DELETE);
-  data_operation_proto.set_key(encrypted_key);
-  data_operation_proto.set_message_encryption_init_vector(
-      message_encryption_init_vector);
+  data_operation_proto.set_key(key);
 
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
-  SendMessage(socket_fd, message_to_send);
 
+  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  if (!status.ok()) {
+    std::cout << status << std::endl;
+    return WaitForServerResponse::kDisabled;
+  }
   return WaitForServerResponse::kEnabled;
 }
 
@@ -233,9 +232,6 @@ int main(int argc, char** argv) {
   }
   const std::string server_ip = argv[1];
   const uint16_t server_port = std::stoi(argv[2]);
-
-  const int32_t kBufferSize = 4096;
-  auto buffer = std::make_unique<char[]>(kBufferSize);
 
   int socket_fd = socket(AF_INET, SOCK_STREAM, 6);
   if (socket_fd == -1) {
@@ -298,60 +294,47 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    std::memset(buffer.get(), 0, kBufferSize);
-    ssize_t buffer_actual_size = read(socket_fd, buffer.get(), kBufferSize);
-
-    if (buffer_actual_size == -1) {
-      perror("Error reading received message");
-      continue;
-    } else if (buffer_actual_size == 0) {
-      std::cout << "Server has disconnected" << std::endl;
-      break;
-    }
-
-    Message received_message;
-    if (!received_message.ParseFromString(
-        std::string(buffer.get(), buffer.get() + buffer_actual_size))) {
-      std::cout << "Received message is corrupted." << std::endl;
+    auto received_message =
+        ReceiveAndDecryptMessage(socket_fd, aes_encryption_key);
+    if (!received_message.ok()) {
+      std::cout << received_message.status();
+      if (absl::IsCancelled(received_message.status())) {
+        break;
+      }
       continue;
     }
 
-    if (received_message.has_session_key()) {
+    if (received_message->has_session_key()) {
       std::cout << "Received a message with the session key." << std::endl;
       auto& encrypted_aes_encryption_key =
-          received_message.session_key().encryption_key();
+          received_message->session_key().encryption_key();
       aes_encryption_key = DecryptStringWithRsaPrivateKey(
           encrypted_aes_encryption_key, rsa_private_key);
       continue;
     }
 
-    if (received_message.has_error_info()) {
+    if (received_message->has_error_info()) {
       std::cout << "Received a message with error info of type "
-                << ErrorInfo::Type_Name(received_message.error_info().type())
+                << ErrorInfo::Type_Name(received_message->error_info().type())
                 << " and description '"
-                << received_message.error_info().description() << "'."
+                << received_message->error_info().description() << "'."
                 << std::endl;
       continue;
     }
 
-    if (received_message.has_ok_info()) {
+    if (received_message->has_ok_info()) {
       std::cout << "Received a message with OK status and description '"
-                << received_message.ok_info().description() << "'."
+                << received_message->ok_info().description() << "'."
                 << std::endl;
       continue;
     }
 
-    if (received_message.has_data_operation()) {
+    if (received_message->has_data_operation()) {
       std::cout << "Received a message with the content" << std::endl;
-      auto decrypted_content = DecryptStringWithAesCbcCipher(
-          received_message.data_operation().content(),
-          aes_encryption_key,
-          received_message.data_operation().message_encryption_init_vector());
-
       try {
-        decrypted_content = DecryptStringWithAesCbcCipher(
-            decrypted_content, password_hash_key,
-            received_message.data_operation().content_encryption_init_vector());
+        auto decrypted_content = DecryptStringWithAesCbcCipher(
+            received_message->data_operation().content(), password_hash_key,
+            received_message->data_operation().content_encryption_init_vector());
         std::cout << decrypted_content << std::endl;
       } catch (...) {
         std::cout << "Decryption error occurred. "
@@ -359,7 +342,6 @@ int main(int argc, char** argv) {
                   << "Please set the necessary password before requesting this data."
                   << std::endl;
       }
-
       continue;
     }
   }

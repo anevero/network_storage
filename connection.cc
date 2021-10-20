@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 
 #include <arpa/inet.h>
@@ -11,6 +10,8 @@
 #include "encryption.h"
 #include "message.pb.h"
 #include "utils.h"
+
+#include "absl/status/status.h"
 
 namespace {
 
@@ -23,7 +24,7 @@ void SendErrorMessage(ErrorInfo::Type error_type,
 
   Message message_to_send;
   *message_to_send.mutable_error_info() = std::move(error_info);
-  SendMessage(socket_fd, message_to_send);
+  SendUnencryptedMessage(message_to_send, socket_fd).IgnoreError();
 }
 
 void SendOkMessage(const std::string& description,
@@ -32,7 +33,7 @@ void SendOkMessage(const std::string& description,
   ok_info.set_description(description);
   Message message_to_send;
   *message_to_send.mutable_ok_info() = std::move(ok_info);
-  SendMessage(socket_fd, message_to_send);
+  SendUnencryptedMessage(message_to_send, socket_fd).IgnoreError();
 }
 
 }  // namespace
@@ -51,33 +52,18 @@ Connection::~Connection() {
 }
 
 void Connection::RunEventLoop() {
-  const int32_t kBufferSize = 16 * 1024 * 1024;  // 16 megabytes
-  auto buffer = std::make_unique<char[]>(kBufferSize);
-
   while (true) {
-    std::memset(buffer.get(), 0, kBufferSize);
-
-    // Receiving new portion of data.
-    auto buffer_actual_size = static_cast<int32_t>(read(
-        socket_fd_, buffer.get(), kBufferSize));
-    if (buffer_actual_size == -1) {
-      perror("Error reading from socket");
-      continue;
-    } else if (buffer_actual_size == 0) {
-      // The client initiated shutdown.
-      break;
-    }
-
-    Message received_message;
-    if (!received_message.ParseFromString(
-        std::string(buffer.get(), buffer.get() + buffer_actual_size))) {
-      SendErrorMessage(ErrorInfo::MESSAGE_CORRUPTED,
-                       "Server cannot parse a received message.",
-                       socket_fd_);
+    auto received_message = ReceiveAndDecryptMessage(
+        socket_fd_, aes_encryption_key_);
+    if (!received_message.ok()) {
+      if (absl::IsCancelled(received_message.status())) {
+        // The client has disconnected.
+        break;
+      }
       continue;
     }
 
-    HandleReceivedMessage(received_message);
+    HandleReceivedMessage(*received_message);
   }
 
   if (shutdown(socket_fd_, SHUT_RDWR) == -1) {
@@ -155,21 +141,14 @@ void Connection::HandleSessionKeyMessage(const SessionKey& session_key) {
 
   Message message_to_send;
   *message_to_send.mutable_session_key() = std::move(session_key_proto);
-  SendMessage(socket_fd_, message_to_send);
+  SendUnencryptedMessage(message_to_send, socket_fd_).IgnoreError();
 }
 
 void Connection::HandleDataOperationMessage(const DataOperation& data_operation) {
-  const auto& client_message_init_vector =
-      data_operation.message_encryption_init_vector();
-  const auto& client_encrypted_key = data_operation.key();
-  auto decrypted_key = DecryptStringWithAesCbcCipher(
-      client_encrypted_key, aes_encryption_key_, client_message_init_vector);
-
   auto operation_type = data_operation.type();
 
   if (operation_type == DataOperation::GET) {
-    auto content =
-        storage_->at(rsa_public_key_)->GetData(decrypted_key);
+    auto content = storage_->at(rsa_public_key_)->GetData(data_operation.key());
     if (!content.has_value()) {
       SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
                        "No data found by the received key.",
@@ -177,43 +156,32 @@ void Connection::HandleDataOperationMessage(const DataOperation& data_operation)
       return;
     }
 
-    auto server_encryption_init_vector = Generate128BitKey();
-    auto server_encrypted_key = EncryptStringWithAesCbcCipher(
-        decrypted_key, aes_encryption_key_, server_encryption_init_vector);
-    auto server_encrypted_content = EncryptStringWithAesCbcCipher(
-        content.value().content,
-        aes_encryption_key_, server_encryption_init_vector);
-
     DataOperation data_operation_to_send;
-    data_operation_to_send.set_key(server_encrypted_key);
-    data_operation_to_send.set_content(server_encrypted_content);
-    data_operation_to_send.set_message_encryption_init_vector(
-        server_encryption_init_vector);
+    data_operation_to_send.set_key(data_operation.key());
+    data_operation_to_send.set_content(content.value().content);
     data_operation_to_send.set_content_encryption_init_vector(
         content.value().init_vector);
 
     Message message_to_send;
     *message_to_send.mutable_data_operation() =
         std::move(data_operation_to_send);
-    SendMessage(socket_fd_, message_to_send);
+    EncryptAndSendMessage(message_to_send,
+                          socket_fd_,
+                          aes_encryption_key_).IgnoreError();
     return;
   }
 
   if (operation_type == DataOperation::UPDATE) {
-    auto decrypted_content = DecryptStringWithAesCbcCipher(
-        data_operation.content(),
-        aes_encryption_key_, client_message_init_vector);
     storage_->at(rsa_public_key_)->PutData(
-        decrypted_key, decrypted_content,
+        data_operation.key(), data_operation.content(),
         data_operation.content_encryption_init_vector());
-
     SendOkMessage("Successfully updated the data", socket_fd_);
     return;
   }
 
   if (operation_type == DataOperation::DELETE) {
     auto status =
-        storage_->at(rsa_public_key_)->RemoveData(decrypted_key);
+        storage_->at(rsa_public_key_)->RemoveData(data_operation.key());
     if (!status.ok()) {
       SendErrorMessage(ErrorInfo::DATA_NOT_FOUND,
                        "No data found by the received key.",

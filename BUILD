@@ -31,8 +31,12 @@ cc_library(
     name = "utils",
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
+    linkopts = ["-lpthread"],
     deps = [
+        ":encryption",
         ":message_cc_proto",
+        "@absl//absl/status",
+        "@absl//absl/status:statusor",
         "@absl//absl/strings",
     ],
 )
@@ -57,6 +61,8 @@ cc_library(
         ":message_cc_proto",
         ":storage",
         ":utils",
+        "@absl//absl/status",
+        "@absl//absl/status:statusor",
     ],
 )
 
@@ -78,6 +84,8 @@ cc_binary(
         ":encryption",
         ":message_cc_proto",
         ":utils",
+        "@absl//absl/status",
+        "@absl//absl/status:statusor",
         "@absl//absl/strings",
     ],
 )
