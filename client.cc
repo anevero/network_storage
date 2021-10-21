@@ -147,7 +147,8 @@ WaitForServerResponse HandleGetDataOperation(
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
 
-  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  auto status = EncryptAndSendMessage(
+      message_to_send, socket_fd, aes_encryption_key);
   if (!status.ok()) {
     std::cout << status << std::endl;
     return WaitForServerResponse::kDisabled;
@@ -185,7 +186,8 @@ WaitForServerResponse HandleUpdateDataOperation(
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
 
-  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  auto status = EncryptAndSendMessage(
+      message_to_send, socket_fd, aes_encryption_key);
   if (!status.ok()) {
     std::cout << status << std::endl;
     return WaitForServerResponse::kDisabled;
@@ -208,7 +210,8 @@ WaitForServerResponse HandleDeleteDataOperation(
   Message message_to_send;
   *message_to_send.mutable_data_operation() = std::move(data_operation_proto);
 
-  auto status = SendUnencryptedMessage(message_to_send, socket_fd);
+  auto status = EncryptAndSendMessage(
+      message_to_send, socket_fd, aes_encryption_key);
   if (!status.ok()) {
     std::cout << status << std::endl;
     return WaitForServerResponse::kDisabled;
